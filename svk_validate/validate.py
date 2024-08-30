@@ -2,7 +2,8 @@ from saxonche import PySaxonProcessor
 from lxml import etree
 import tempfile
 from pathlib import Path
-
+import os
+from datetime import datetime
 
 class ErmsValidator:
 
@@ -22,9 +23,10 @@ class ErmsValidator:
     erms_svk_version = None
     erms_schema_files = None
     erms_svk_schema_files = None
-
+    app_path = os.path.dirname(__file__)
 
     def __init__(self, path_to_xml_file: str):
+
         self.xml_file = Path(path_to_xml_file)
 
         if not self.xml_file.is_file():
@@ -41,15 +43,18 @@ class ErmsValidator:
         if not self.erms_svk_version:
             raise Exception(f"'{path_to_xml_file}' has no information about  the version of the ERMS-SVK document.")
 
+
+
         if self.erms_svk_version == self.ERMS_SVK_ARENDE_1:
-            erms_dir = Path("schemata", "erms-3-0-0")
+            erms_dir = Path(self.app_path, "schemata", "erms-3-0-0")
+
             self.erms_schema_files = {
-                "xsd": str(Path(erms_dir).joinpath("ERMS_v3.xsd")),
+                "xsd": Path(erms_dir).joinpath("ERMS_v3.xsd"),
                 "sch": str(Path(erms_dir).joinpath("erms_v3.sch")),
                 "sch_compiled": str(Path(erms_dir).joinpath("erms_v3_sch_compiled.xsl")),
             }
 
-            erms_svk_dir = Path("schemata", "erms-svk-1-0")
+            erms_svk_dir = Path(self.app_path, "schemata", "erms-svk-1-0")
             self.erms_svk_schema_files = {
                 "xsd": str(Path(erms_svk_dir).joinpath("ERMS-SVK-ARENDE.xsd")),
                 "xsd_element": str(Path(erms_svk_dir).joinpath("ERMS-SVK-element.xsd")),
@@ -64,7 +69,7 @@ class ErmsValidator:
             xmlschema_doc = etree.parse(self.erms_schema_files['xsd'])
 
         elif schema == "erms-svk-arende":
-            xmlschema_doc = etree.parse(self.erms_schema_files['xsd'])
+            xmlschema_doc = etree.parse(self.erms_svk_schema_files['xsd'])
 
         else:
             raise Exception(f"'{schema}' is not a valid argument.")
@@ -81,7 +86,7 @@ class ErmsValidator:
 
     def schematron_validate(self):
 
-        schematron_xls = str(Path("schxslt-1.10/2.0/pipeline-for-svrl.xsl"))
+        schematron_xls = str(Path(self.app_path, "schxslt-1.10/2.0/pipeline-for-svrl.xsl"))
 
         with PySaxonProcessor(license=False) as proc:
 
@@ -132,3 +137,27 @@ class ErmsValidator:
             is_valid = True
 
         return {"is_valid": is_valid, "erms": erms, "erms_svk": erms_svk}
+
+    def validate(self, logfile):
+        erms_log = self.xml_validate("erms")
+        erms_svk_log = self.xml_validate("erms-svk-arende")
+        sch_log = self.schematron_validate()
+
+        log_file = datetime.now().strftime("%Y_%m_%d-%H_%M_%S")
+
+        if logfile:
+            with open(log_file, 'w') as f:
+                f.write(erms_log["message"] + "\n")
+                f.write(erms_svk_log["message"] + "\n")
+                for entry in sch_log["erms"]["validation_errors"]:
+                    f.write(entry["text"] + "\n")
+                for entry in sch_log["erms_svk"]["validation_errors"]:
+                    f.write(entry["text"] + "\n")
+
+        print(f"Validating {self.xml_file}:")
+        print(f"Is valid ERMS: {erms_log['is_valid']}")
+        print(f"Is valid ERMS-SVK: {erms_svk_log['is_valid']}")
+        print(f"Schematron is valid: {sch_log['is_valid']}")
+
+# val = ErmsValidator("../xml-files/erms_07.xml")
+# val.validate()

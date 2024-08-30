@@ -18,7 +18,7 @@
             <schxslt.compile.typed-variables xmlns="https://doi.org/10.5281/zenodo.1495494#">true</schxslt.compile.typed-variables>
          </dct:Agent>
       </dct:creator>
-      <dct:created>2024-08-27T19:39:05.592914+02:00</dct:created>
+      <dct:created>2024-08-30T18:15:34.655704+02:00</dct:created>
    </rdf:Description>
    <xsl:output indent="yes"/>
    <xsl:param name="schxslt.validate.initial-document-uri" as="xs:string?"/>
@@ -61,7 +61,7 @@
                               <schxslt.compile.typed-variables xmlns="https://doi.org/10.5281/zenodo.1495494#">true</schxslt.compile.typed-variables>
                            </dct:Agent>
                         </dct:creator>
-                        <dct:created>2024-08-27T19:39:05.592914+02:00</dct:created>
+                        <dct:created>2024-08-30T18:15:34.655704+02:00</dct:created>
                      </rdf:Description>
                   </dct:source>
                </svrl:metadata>
