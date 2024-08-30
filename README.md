@@ -5,6 +5,9 @@
 [![Tests](https://github.com/svkau/svk-validate/actions/workflows/test.yml/badge.svg)](https://github.com/svkau/svk-validate/actions/workflows/test.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](https://github.com/svkau/svk-validate/blob/master/LICENSE)
 
+
+NB! This is a test release. It should work to validate singel XML-files. But don't use this unless you have to :)
+
 A simple tool for validating XML-files against Church of Sweden's adaptation of ERMS.
 
 ## Installation
