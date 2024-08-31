@@ -1,6 +1,6 @@
 [project]
 name = "svk-validate"
-version = "0.1"
+version = "0.3"
 description = "A simple tool for validating XML-files against Church of Sweden's adaptation of ERMS."
 readme = "README.md"
 authors = [{name = "Svenska kyrkans arkiv i Uppsala"}]
