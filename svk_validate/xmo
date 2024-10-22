@@ -1,0 +1,217 @@
+import xml.etree.ElementTree as ET
+import xml.sax
+from pathlib import Path
+import re
+from datetime import datetime
+
+class XMPValidator:
+    def __init__(self):
+        # Common XMP namespaces
+        self.namespaces = {
+            'x': 'adobe:ns:meta/',
+            'rdf': 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
+            'xmp': 'http://ns.adobe.com/xap/1.0/',
+            'dc': 'http://purl.org/dc/elements/1.1/',
+            'photoshop': 'http://ns.adobe.com/photoshop/1.0/',
+            # Dublin Core namespaces
+            'dcterms': 'http://purl.org/dc/terms/',
+            'dcmitype': 'http://purl.org/dc/dcmitype/',
+            'dcam': 'http://purl.org/dc/dcam/',
+            # XMP exit block identifiers
+            'xmpMM': 'http://ns.adobe.com/xap/1.0/mm/',
+            'stEvt': 'http://ns.adobe.com/xap/1.0/sType/ResourceEvent#',
+            'stRef': 'http://ns.adobe.com/xap/1.0/sType/ResourceRef#',
+            # EXIF namespaces
+            'exif': 'http://ns.adobe.com/exif/1.0/',
+            'exifEX': 'http://cipa.jp/exif/1.0/',
+            'tiff': 'http://ns.adobe.com/tiff/1.0/',
+            'aux': 'http://ns.adobe.com/exif/1.0/aux/'
+        }
+        
+        # Common EXIF tags for validation
+        self.exif_tags = {
+            'basic': [
+                'Make', 'Model', 'DateTimeOriginal', 'ExposureTime', 
+                'FNumber', 'ISOSpeedRatings', 'FocalLength'
+            ],
+            'advanced': [
+                'ExposureProgram', 'MeteringMode', 'WhiteBalance',
+                'Flash', 'ExposureBiasValue', 'MaxApertureValue'
+            ],
+            'gps': [
+                'GPSLatitude', 'GPSLongitude', 'GPSAltitude',
+                'GPSTimeStamp', 'GPSProcessingMethod'
+            ]
+        }
+
+    def validate_file_exists(self, file_path):
+        """Check if the file exists and has .xmp extension."""
+        path = Path(file_path)
+        if not path.exists():
+            return False, "File does not exist"
+        if path.suffix.lower() != '.xmp':
+            return False, "File does not have .xmp extension"
+        return True, "File exists and has correct extension"
+
+    def validate_xml_syntax(self, file_path):
+        """Validate basic XML syntax."""
+        try:
+            parser = xml.sax.make_parser()
+            parser.parse(file_path)
+            return True, "XML syntax is valid"
+        except Exception as e:
+            return False, f"XML syntax error: {str(e)}"
+
+    def validate_xmp_structure(self, file_path):
+        """Validate basic XMP structure and required elements."""
+        try:
+            tree = ET.parse(file_path)
+            root = tree.getroot()
+            
+            # Check for required XMP packet wrapper
+            if not root.tag.endswith('}xmpmeta'):
+                return False, "Missing xmpmeta wrapper"
+            
+            # Check for RDF structure
+            rdf = root.find('.//{http://www.w3.org/1999/02/22-rdf-syntax-ns#}RDF')
+            if rdf is None:
+                return False, "Missing RDF element"
+            
+            # Validate Dublin Core elements if present
+            dc_elements = root.findall('.//*[@xmlns:dc]')
+            if dc_elements:
+                for elem in dc_elements:
+                    if not any(ns in elem.attrib for ns in ['dc', 'dcterms', 'dcmitype', 'dcam']):
+                        return False, f"Invalid Dublin Core namespace in element: {elem.tag}"
+            
+            # Validate XMP exit block if present
+            xmp_mm = root.findall('.//*[@xmlns:xmpMM]')
+            if xmp_mm:
+                for elem in xmp_mm:
+                    history = elem.find('.//*[@stEvt:action]')
+                    if history is not None and 'action' not in history.attrib:
+                        return False, "Invalid XMP exit block: missing required action attribute"
+            
+            return True, "XMP structure appears valid"
+            
+        except Exception as e:
+            return False, f"XMP structure validation error: {str(e)}"
+
+    def validate_packet_wrapper(self, file_content):
+        """Validate XMP packet wrapper."""
+        pattern = r'<\?xpacket begin=".+" id=".+"\?>'
+        if not re.search(pattern, file_content):
+            return False, "Missing or invalid packet wrapper begin marker"
+        if '<?xpacket end=' not in file_content:
+            return False, "Missing packet wrapper end marker"
+        return True, "Packet wrapper is valid"
+
+    def validate_dublin_core(self, file_path):
+        """Validate Dublin Core metadata if present."""
+        try:
+            tree = ET.parse(file_path)
+            root = tree.getroot()
+            
+            # Common Dublin Core elements to check
+            dc_elements = [
+                'title', 'creator', 'subject', 'description', 'publisher',
+                'contributor', 'date', 'type', 'format', 'identifier',
+                'source', 'language', 'relation', 'coverage', 'rights'
+            ]
+            
+            found_dc = False
+            for elem_name in dc_elements:
+                elem = root.find(f'.//*[local-name()="{elem_name}"]')
+                if elem is not None:
+                    found_dc = True
+                    if not any(ns in elem.attrib for ns in ['dc', 'dcterms']):
+                        return False, f"Dublin Core element '{elem_name}' found without proper namespace"
+            
+            if found_dc:
+                return True, "Dublin Core metadata is valid"
+            return True, "No Dublin Core metadata found"
+            
+        except Exception as e:
+            return False, f"Dublin Core validation error: {str(e)}"
+
+    def validate_exif_data(self, file_path):
+        """Validate EXIF metadata if present."""
+        try:
+            tree = ET.parse(file_path)
+            root = tree.getroot()
+            
+            # Check for EXIF namespace
+            exif_elements = root.findall('.//*[@xmlns:exif]')
+            if not exif_elements:
+                return True, "No EXIF data found"
+            
+            validation_results = []
+            
+            # Validate basic EXIF tags
+            for tag in self.exif_tags['basic']:
+                elem = root.find(f'.//*[local-name()="{tag}"]')
+                if elem is not None:
+                    # Validate specific data types
+                    if tag == 'DateTimeOriginal':
+                        try:
+                            datetime.strptime(elem.text, '%Y:%m:%d %H:%M:%S')
+                        except ValueError:
+                            validation_results.append(f"Invalid DateTime format for {tag}")
+                    elif tag in ['ExposureTime', 'FNumber', 'FocalLength']:
+                        if not re.match(r'^[\d./]+$', elem.text):
+                            validation_results.append(f"Invalid number format for {tag}")
+            
+            # Validate GPS data if present
+            gps_elements = root.findall('.//*[@xmlns:exif:GPSLatitude]')
+            if gps_elements:
+                for gps_tag in self.exif_tags['gps']:
+                    elem = root.find(f'.//*[local-name()="{gps_tag}"]')
+                    if elem is None:
+                        validation_results.append(f"Missing GPS tag: {gps_tag}")
+            
+            if validation_results:
+                return False, "EXIF validation errors: " + "; ".join(validation_results)
+            return True, "EXIF data is valid"
+            
+        except Exception as e:
+            return False, f"EXIF validation error: {str(e)}"
+
+    def validate(self, file_path):
+        """Perform all validations on the XMP file."""
+        results = []
+        
+        # Check file existence
+        exists_result = self.validate_file_exists(file_path)
+        results.append(exists_result)
+        if not exists_result[0]:
+            return results
+        
+        # Read file content
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+        except Exception as e:
+            results.append((False, f"Error reading file: {str(e)}"))
+            return results
+        
+        # Perform all validations
+        results.append(self.validate_xml_syntax(file_path))
+        results.append(self.validate_xmp_structure(file_path))
+        results.append(self.validate_packet_wrapper(content))
+        results.append(self.validate_dublin_core(file_path))
+        results.append(self.validate_exif_data(file_path))
+        
+        return results
+
+# Example usage
+if __name__ == "__main__":
+    validator = XMPValidator()
+    
+    # Example XMP file validation
+    file_path = "example.xmp"
+    results = validator.validate(file_path)
+    
+    print(f"\nValidation results for {file_path}:")
+    for success, message in results:
+        status = "✓" if success else "✗"
+        print(f"{status} {message}")
